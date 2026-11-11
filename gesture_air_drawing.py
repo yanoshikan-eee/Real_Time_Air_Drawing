@@ -69,6 +69,15 @@ canvas = None
 # Selected drawing colour (BGR format)
 drawing_color = (0, 255, 0)
 
+# Brush thickness
+brush_thickness = 5
+
+# Eraser mode
+eraser_mode = False
+
+# Eraser thickness
+eraser_thickness = 25
+
 
 # Function to check whether a finger is extended
 def is_finger_extended(hand_landmarks, tip, pip):
@@ -256,12 +265,20 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
                 if previous_x != 0 and previous_y != 0:
 
+                    # Select drawing or eraser settings
+                    if eraser_mode:
+                        current_color = (0, 0, 0)
+                        current_thickness = eraser_thickness
+                    else:
+                        current_color = drawing_color
+                        current_thickness = brush_thickness
+
                     cv2.line(
                         canvas,
                         (previous_x, previous_y),
                         (cursor_x, cursor_y),
-                        drawing_color,
-                        5,
+                        current_color,
+                        current_thickness,
                         cv2.LINE_AA
                     )
 
@@ -352,6 +369,35 @@ with HandLandmarker.create_from_options(options) as landmarker:
                 2
             )
 
+        # Display brush thickness
+        cv2.putText(
+            frame,
+            f"BRUSH SIZE: {brush_thickness}",
+            (20, 110),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2
+        )
+
+        # Display drawing mode
+        if eraser_mode:
+            mode_text = "MODE: ERASER"
+            mode_color = (0, 0, 255)
+        else:
+            mode_text = "MODE: DRAWING"
+            mode_color = (0, 255, 0)
+
+        cv2.putText(
+            frame,
+            mode_text,
+            (20, 145),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            mode_color,
+            2
+        )
+
         # Draw tracking region
         cv2.rectangle(
             frame,
@@ -395,6 +441,30 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
         elif key == ord('k'):
             drawing_color = (0, 0, 0)
+
+        # Increase brush thickness
+        elif key in (ord('+'), ord('=')):
+            brush_thickness = min(brush_thickness + 1, 30)
+            print("Brush thickness:", brush_thickness)
+
+        # Decrease brush thickness
+        elif key == ord('-'):
+            brush_thickness = max(brush_thickness - 1, 1)
+            print("Brush thickness:", brush_thickness)
+
+        # Enable eraser mode
+        elif key in (ord('e'), ord('E')):
+            eraser_mode = True
+            previous_x = 0
+            previous_y = 0
+            print("Eraser mode enabled")
+
+        # Return to normal drawing mode
+        elif key in (ord('n'), ord('N')):
+            eraser_mode = False
+            previous_x = 0
+            previous_y = 0
+            print("Normal drawing mode enabled")
 
         # Press C to clear canvas manually
         if key == ord('c'):
