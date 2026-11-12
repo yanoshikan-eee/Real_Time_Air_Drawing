@@ -59,6 +59,11 @@ smooth_y = 0
 # Previous gesture
 previous_gesture = None
 
+# Day 14: Gesture stabilization
+candidate_gesture = None
+candidate_start_time = 0
+GESTURE_HOLD_TIME = 0.3
+
 # Tracking region
 FRAME_MARGIN_X = 100
 FRAME_MARGIN_Y = 60
@@ -186,7 +191,29 @@ with HandLandmarker.create_from_options(options) as landmarker:
             ])
 
             # Recognize gestures
-            if index_up and not middle_up and finger_count < 5:
+            # Day 13 advanced gesture controls
+
+            if thumb_up and not index_up and not middle_up and not ring_up and not little_up:
+
+                gesture = "BRUSH_UP"
+                color = (0, 255, 255)
+
+            elif thumb_up and index_up and not middle_up and not ring_up and not little_up:
+
+                gesture = "BRUSH_DOWN"
+                color = (0, 255, 255)
+
+            elif thumb_up and index_up and middle_up and ring_up and not little_up:
+
+                gesture = "ERASER_ON"
+                color = (0, 0, 255)
+
+            elif thumb_up and index_up and middle_up and not ring_up and little_up:
+
+                gesture = "DRAW_MODE"
+                color = (0, 255, 0)
+
+            elif index_up and not middle_up and finger_count < 5:
 
                 gesture = "DRAW"
                 color = (0, 255, 0)
@@ -210,6 +237,28 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
                 gesture = "OTHER GESTURE"
                 color = (255, 255, 255)
+
+            # Day 14: Stabilize advanced gestures
+            advanced_gestures = [
+                "BRUSH_UP",
+                "BRUSH_DOWN",
+                "ERASER_ON",
+                "DRAW_MODE"
+            ]
+
+            if gesture in advanced_gestures:
+
+                if candidate_gesture != gesture:
+                    candidate_gesture = gesture
+                    candidate_start_time = time.perf_counter()
+
+                if time.perf_counter() - candidate_start_time < GESTURE_HOLD_TIME:
+                    gesture = "OTHER GESTURE"
+                    color = (255, 255, 255)
+
+            else:
+                candidate_gesture = None
+                candidate_start_time = 0
 
             # Get index fingertip coordinates
             index_tip = hand_landmarks[8]
@@ -260,8 +309,46 @@ with HandLandmarker.create_from_options(options) as landmarker:
             cursor_x = smooth_x
             cursor_y = smooth_y
 
+            # Day 13: Advanced gesture actions
+
+            if gesture == "BRUSH_UP":
+
+                if previous_gesture != "BRUSH_UP":
+                    brush_thickness = min(brush_thickness + 1, 30)
+                    print("Brush thickness:", brush_thickness)
+
+                previous_x = 0
+                previous_y = 0
+
+            elif gesture == "BRUSH_DOWN":
+
+                if previous_gesture != "BRUSH_DOWN":
+                    brush_thickness = max(brush_thickness - 1, 1)
+                    print("Brush thickness:", brush_thickness)
+
+                previous_x = 0
+                previous_y = 0
+
+            elif gesture == "ERASER_ON":
+
+                if previous_gesture != "ERASER_ON":
+                    eraser_mode = True
+                    print("Eraser mode enabled by gesture")
+
+                previous_x = 0
+                previous_y = 0
+
+            elif gesture == "DRAW_MODE":
+
+                if previous_gesture != "DRAW_MODE":
+                    eraser_mode = False
+                    print("Normal drawing mode enabled by gesture")
+
+                previous_x = 0
+                previous_y = 0
+
             # DRAW gesture
-            if gesture == "DRAW":
+            elif gesture == "DRAW":
 
                 if previous_x != 0 and previous_y != 0:
 
@@ -269,6 +356,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
                     if eraser_mode:
                         current_color = (0, 0, 0)
                         current_thickness = eraser_thickness
+
                     else:
                         current_color = drawing_color
                         current_thickness = brush_thickness
@@ -359,6 +447,10 @@ with HandLandmarker.create_from_options(options) as landmarker:
             smooth_y = 0
             previous_gesture = None
 
+            # Reset Day 14 stabilization
+            candidate_gesture = None
+            candidate_start_time = 0
+
             cv2.putText(
                 frame,
                 "NO HAND DETECTED",
@@ -384,6 +476,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
         if eraser_mode:
             mode_text = "MODE: ERASER"
             mode_color = (0, 0, 255)
+
         else:
             mode_text = "MODE: DRAWING"
             mode_color = (0, 255, 0)
