@@ -369,6 +369,14 @@ with HandLandmarker.create_from_options(options) as landmarker:
                         current_thickness,
                         cv2.LINE_AA
                     )
+                    cv2.circle(
+                         canvas,
+                        (cursor_x, cursor_y),
+                        max(1, current_thickness // 2),
+                         current_color,
+                         -1,
+                        cv2.LINE_AA
+                    )
 
                 previous_x = cursor_x
                 previous_y = cursor_y
