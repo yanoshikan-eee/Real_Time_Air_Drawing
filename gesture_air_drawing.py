@@ -352,31 +352,41 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
                 if previous_x != 0 and previous_y != 0:
 
-                    # Select drawing or eraser settings
-                    if eraser_mode:
-                        current_color = (0, 0, 0)
-                        current_thickness = eraser_thickness
-
-                    else:
-                        current_color = drawing_color
-                        current_thickness = brush_thickness
-
-                    cv2.line(
-                        canvas,
-                        (previous_x, previous_y),
-                        (cursor_x, cursor_y),
-                        current_color,
-                        current_thickness,
-                        cv2.LINE_AA
+                    # Day 17: Check cursor movement distance
+                    movement_distance = np.hypot(
+                        cursor_x - previous_x,
+                        cursor_y - previous_y
                     )
-                    cv2.circle(
-                         canvas,
-                        (cursor_x, cursor_y),
-                        max(1, current_thickness // 2),
-                         current_color,
-                         -1,
-                        cv2.LINE_AA
-                    )
+
+                    if movement_distance < 80:
+
+                        # Select drawing or eraser settings
+                        if eraser_mode:
+                            current_color = (0, 0, 0)
+                            current_thickness = eraser_thickness
+
+                        else:
+                            current_color = drawing_color
+                            current_thickness = brush_thickness
+
+                        cv2.line(
+                            canvas,
+                            (previous_x, previous_y),
+                            (cursor_x, cursor_y),
+                            current_color,
+                            current_thickness,
+                            cv2.LINE_AA
+                        )
+
+                        # Day 16: Improve stroke continuity
+                        cv2.circle(
+                            canvas,
+                            (cursor_x, cursor_y),
+                            max(1, current_thickness // 2),
+                            current_color,
+                            -1,
+                            cv2.LINE_AA
+                        )
 
                 previous_x = cursor_x
                 previous_y = cursor_y
