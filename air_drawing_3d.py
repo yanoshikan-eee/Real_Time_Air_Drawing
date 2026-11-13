@@ -276,7 +276,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
                         np.array(point_3d) - np.array(previous_point)
                     )
 
-                    if movement_distance >= 0.15:
+                    if movement_distance >= 0.30:
 
                         # Start a separate stroke
                         current_stroke = []
