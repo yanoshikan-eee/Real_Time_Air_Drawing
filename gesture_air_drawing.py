@@ -3,6 +3,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import time
+import tensorflow as tf
 
 # Initialize MediaPipe Hand Landmarker
 BaseOptions = mp.tasks.BaseOptions
@@ -10,8 +11,18 @@ HandLandmarker = mp.tasks.vision.HandLandmarker
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 
-# Model location
+# Hand Landmarker model location
 MODEL_PATH = "models/hand_landmarker.task"
+
+# Load handwriting recognition model
+handwriting_model = tf.keras.models.load_model(
+    "handwriting_model.keras"
+)
+
+with open("handwriting_labels.txt", "r") as file:
+    handwriting_labels = file.read().strip()
+
+print("Handwriting recognition model loaded successfully!")
 
 # Hand landmark connections
 HAND_CONNECTIONS = [
@@ -59,7 +70,7 @@ smooth_y = 0
 # Previous gesture
 previous_gesture = None
 
-# Day 14: Gesture stabilization
+# Gesture stabilization
 candidate_gesture = None
 candidate_start_time = 0
 GESTURE_HOLD_TIME = 0.3
@@ -83,6 +94,10 @@ eraser_mode = False
 # Eraser thickness
 eraser_thickness = 25
 
+# Handwriting recognition result
+recognition_result = None
+recognition_confidence = 0.0
+
 
 # Function to check whether a finger is extended
 def is_finger_extended(hand_landmarks, tip, pip):
@@ -101,6 +116,111 @@ def is_thumb_extended(hand_landmarks):
     base_distance = abs(thumb_mcp.x - index_mcp.x)
 
     return thumb_distance > base_distance + 0.04
+
+
+# Function to prepare drawing for handwriting recognition
+def prepare_handwriting_image(canvas):
+
+    gray = cv2.cvtColor(
+        canvas,
+        cv2.COLOR_BGR2GRAY
+    )
+
+    _, binary = cv2.threshold(
+        gray,
+        20,
+        255,
+        cv2.THRESH_BINARY
+    )
+
+    coordinates = cv2.findNonZero(binary)
+
+    if coordinates is None:
+        return None
+
+    x, y, w, h = cv2.boundingRect(coordinates)
+
+    cropped = binary[y:y + h, x:x + w]
+
+    # Preserve aspect ratio
+    scale = 20.0 / max(w, h)
+
+    new_w = max(1, int(w * scale))
+    new_h = max(1, int(h * scale))
+
+    resized = cv2.resize(
+        cropped,
+        (new_w, new_h),
+        interpolation=cv2.INTER_AREA
+    )
+
+    # Center character in 28 x 28 image
+    processed = np.zeros(
+        (28, 28),
+        dtype=np.uint8
+    )
+
+    x_offset = (28 - new_w) // 2
+    y_offset = (28 - new_h) // 2
+
+    processed[
+        y_offset:y_offset + new_h,
+        x_offset:x_offset + new_w
+    ] = resized
+
+    processed = processed.astype("float32") / 255.0
+
+    processed = processed.reshape(1, 28, 28, 1)
+
+    return processed
+
+
+# Function to recognize handwritten character
+def recognize_handwriting(canvas):
+
+    global recognition_result
+    global recognition_confidence
+
+    processed_image = prepare_handwriting_image(canvas)
+
+    if processed_image is None:
+
+        recognition_result = "NO DRAWING"
+        recognition_confidence = 0.0
+
+        print("No drawing available for recognition.")
+        return
+
+    # Match the original EMNIST dataset orientation
+    processed_image = np.transpose(
+        processed_image,
+        (0, 2, 1, 3)
+    )
+
+    # Display exact 28 x 28 image sent to CNN
+    display_image = processed_image[0].reshape(28, 28)
+
+    cv2.imshow(
+        "Image Sent to CNN",
+        display_image
+    )
+
+    # Predict character
+    predictions = handwriting_model.predict(
+        processed_image,
+        verbose=0
+    )
+
+    predicted_index = int(np.argmax(predictions[0]))
+
+    recognition_confidence = float(
+        np.max(predictions[0]) * 100
+    )
+
+    recognition_result = handwriting_labels[predicted_index]
+
+    print("Recognized Character:", recognition_result)
+    print("Confidence:", round(recognition_confidence, 2), "%")
 
 
 # Initialize hand detector
@@ -139,6 +259,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
             int((time.perf_counter() - start_time) * 1000),
             last_timestamp + 1
         )
+
         last_timestamp = timestamp_ms
 
         # Detect hand
@@ -149,7 +270,6 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
         if result.hand_landmarks:
 
-            # Get first detected hand
             hand_landmarks = result.hand_landmarks[0]
 
             # Convert landmarks to pixel coordinates
@@ -191,8 +311,6 @@ with HandLandmarker.create_from_options(options) as landmarker:
             ])
 
             # Recognize gestures
-            # Day 13 advanced gesture controls
-
             if thumb_up and not index_up and not middle_up and not ring_up and not little_up:
 
                 gesture = "BRUSH_UP"
@@ -238,7 +356,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
                 gesture = "OTHER GESTURE"
                 color = (255, 255, 255)
 
-            # Day 14: Stabilize advanced gestures
+            # Stabilize advanced gestures
             advanced_gestures = [
                 "BRUSH_UP",
                 "BRUSH_DOWN",
@@ -285,19 +403,16 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
             else:
 
-                # Calculate cursor movement distance
                 distance = np.hypot(
                     current_x - smooth_x,
                     current_y - smooth_y
                 )
 
-                # Adjust smoothing according to movement
                 if distance > 8:
                     adaptive_smoothing = 0.95
                 else:
                     adaptive_smoothing = 0.65
 
-                # Smooth cursor position
                 smooth_x = int(
                     smooth_x + (current_x - smooth_x) * adaptive_smoothing
                 )
@@ -309,8 +424,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
             cursor_x = smooth_x
             cursor_y = smooth_y
 
-            # Day 13: Advanced gesture actions
-
+            # Advanced gesture actions
             if gesture == "BRUSH_UP":
 
                 if previous_gesture != "BRUSH_UP":
@@ -352,7 +466,6 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
                 if previous_x != 0 and previous_y != 0:
 
-                    # Day 17: Check cursor movement distance
                     movement_distance = np.hypot(
                         cursor_x - previous_x,
                         cursor_y - previous_y
@@ -360,7 +473,6 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
                     if movement_distance < 80:
 
-                        # Select drawing or eraser settings
                         if eraser_mode:
                             current_color = (0, 0, 0)
                             current_thickness = eraser_thickness
@@ -378,7 +490,6 @@ with HandLandmarker.create_from_options(options) as landmarker:
                             cv2.LINE_AA
                         )
 
-                        # Day 16: Improve stroke continuity
                         cv2.circle(
                             canvas,
                             (cursor_x, cursor_y),
@@ -413,16 +524,17 @@ with HandLandmarker.create_from_options(options) as landmarker:
                         dtype=np.uint8
                     )
 
+                    recognition_result = None
+                    recognition_confidence = 0.0
+
                 previous_x = 0
                 previous_y = 0
 
-            # Other gestures
             else:
 
                 previous_x = 0
                 previous_y = 0
 
-            # Update previous gesture
             previous_gesture = gesture
 
             # Draw fingertip cursor
@@ -458,14 +570,12 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
         else:
 
-            # Reset previous position and gesture
             previous_x = 0
             previous_y = 0
             smooth_x = 0
             smooth_y = 0
             previous_gesture = None
 
-            # Reset Day 14 stabilization
             candidate_gesture = None
             candidate_start_time = 0
 
@@ -509,6 +619,24 @@ with HandLandmarker.create_from_options(options) as landmarker:
             2
         )
 
+        # Display handwriting recognition result
+        if recognition_result is not None:
+
+            recognition_text = (
+                f"RECOGNIZED: {recognition_result} "
+                f"({recognition_confidence:.1f}%)"
+            )
+
+            cv2.putText(
+                frame,
+                recognition_text,
+                (20, 185),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 255, 255),
+                2
+            )
+
         # Draw tracking region
         cv2.rectangle(
             frame,
@@ -533,6 +661,10 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
         # Keyboard controls
         key = cv2.waitKey(1) & 0xFF
+
+        # Handwriting recognition
+        if key in (ord('h'), ord('H')):
+            recognize_handwriting(canvas)
 
         # Colour selection
         if key == ord('r'):
@@ -587,6 +719,9 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
             previous_x = 0
             previous_y = 0
+
+            recognition_result = None
+            recognition_confidence = 0.0
 
         # Press Q to exit
         if key == ord('q'):
